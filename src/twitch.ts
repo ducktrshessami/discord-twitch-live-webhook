@@ -17,6 +17,7 @@ const OAUTH_REVOKE_ENDPOINT = OAUTH_BASE_ENDPOINT + "/revoke";
 export const API_BASE_ENDPOINT = "https://api.twitch.tv/helix";
 const GET_USERS_ENDPOINT = API_BASE_ENDPOINT + "/users";
 const SUBSCRIPTION_ENDPOINT = API_BASE_ENDPOINT + "/eventsub/subscriptions";
+const GET_CHANNELS_ENDPOINT = API_BASE_ENDPOINT + "/channels";
 
 export enum RequestHeaders {
     MessageId = "twitch-eventsub-message-id",
@@ -249,7 +250,7 @@ export async function getUsers(
     clientId: string,
     accessToken: string,
     options: GetUsersOptions
-): Promise<GetUsersResponse> {
+): Promise<GetResourceResponse<User>> {
     const query = new URLSearchParams();
     options.ids?.forEach(id => query.append("id", id));
     options.logins?.forEach(login => query.append("login", login));
@@ -331,6 +332,28 @@ export async function deleteSubscription(
         { query: new URLSearchParams({ id: subscriptionId }) }
     );
     if (res.status !== 204) {
+        throw new FetchError(res);
+    }
+}
+
+export async function getChannels(
+    clientId: string,
+    accessToken: string,
+    ids: Array<string>
+): Promise<GetResourceResponse<Channel>> {
+    const query = new URLSearchParams();
+    ids.forEach(id => query.append("broadcaster_id", id));
+    const res = await authorizedRequest(
+        clientId,
+        accessToken,
+        GET_CHANNELS_ENDPOINT,
+        "GET",
+        { query }
+    );
+    if (res.status === 200) {
+        return await res.json();
+    }
+    else {
         throw new FetchError(res);
     }
 }
@@ -709,11 +732,12 @@ type ClientCredentialRevokeQueryPairs = {
     token: string;
 };
 
+type GetResourceResponse<Resource> = { data: Array<Resource> };
+
 type GetUsersOptions = {
     ids?: Array<string>;
     logins?: Array<string>;
 };
-
 type User = {
     id: string;
     login: string;
@@ -727,4 +751,14 @@ type User = {
     created_at: string;
 };
 
-type GetUsersResponse = { data: Array<User> };
+type Channel = {
+    broadcaster_id: string;
+    broadcaster_login: string;
+    broadcaster_name: string;
+    broadcaster_language: string;
+    game_name: string;
+    game_id: string;
+    title: string;
+    delay: number;
+    tags: Array<string>;
+};
