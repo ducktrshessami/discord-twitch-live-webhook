@@ -1,9 +1,22 @@
-import { Env } from ".";
+import { Env } from "./index.js";
+import { FetchError } from "./error.js";
 import {
     hexBuffer,
     requestHeader,
     stringBuffer
-} from "./utils";
+} from "./utils.js";
+
+export const API_VERSION = "1";
+const HMAC_PREFIX = "sha256=";
+const OAUTH_GRANT_TYPE = "client_credentials";
+
+export const OAUTH_BASE_ENDPOINT = "https://id.twitch.tv/oauth2";
+const OAUTH_TOKEN_ENDPOINT = OAUTH_BASE_ENDPOINT + "/token";
+const OAUTH_REVOKE_ENDPOINT = OAUTH_BASE_ENDPOINT + "/revoke";
+
+export const API_BASE_ENDPOINT = "https://api.twitch.tv/helix";
+const GET_USERS_ENDPOINT = API_BASE_ENDPOINT + "/users";
+const SUBSCRIPTION_ENDPOINT = API_BASE_ENDPOINT + "/eventsub/subscriptions";
 
 export enum RequestHeaders {
     MessageId = "twitch-eventsub-message-id",
@@ -95,6 +108,24 @@ export enum StreamType {
     Rerun = "rerun"
 }
 
+export enum TransportMethod {
+    Webhook = "webhook",
+    Websocket = "websocket"
+}
+
+export enum UserType {
+    Admin = "admin",
+    GlobalMod = "global_mod",
+    Staff = "staff",
+    Normal = ""
+}
+
+export enum BroadcasterType {
+    Affiliate = "affiliate",
+    Partner = "partner",
+    Normal = ""
+}
+
 async function getKey(env: Env): Promise<CryptoKey> {
     return await crypto.subtle.importKey(
         "raw",
@@ -118,6 +149,7 @@ async function getHmacMessage(request: Request, body: Blob): Promise<ArrayBuffer
 }
 
 export async function verifyRequest(request: Request, body: Blob, env: Env): Promise<boolean> {
+    const signature = requestHeader(request, RequestHeaders.MessageSignature);
     const [key, message] = await Promise.all([
         getKey(env),
         getHmacMessage(request, body)
@@ -125,7 +157,7 @@ export async function verifyRequest(request: Request, body: Blob, env: Env): Pro
     return await crypto.subtle.verify(
         "HMAC",
         key,
-        hexBuffer(requestHeader(request, RequestHeaders.MessageSignature)),
+        hexBuffer(signature.startsWith(HMAC_PREFIX) ? signature.slice(HMAC_PREFIX.length) : signature),
         message
     );
 }
@@ -134,17 +166,186 @@ export function isStreamOnlineBody(body: WebhookBody): body is StreamOnlineWebho
     return body.subscription.type === SubscriptionType.StreamOnline;
 }
 
+async function oauthRequest(url: string, body: any): Promise<Response> {
+    const query = new URLSearchParams(body);
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: query.toString()
+    });
+    if (res.status === 200) {
+        return res;
+    }
+    else {
+        throw new FetchError(res);
+    }
+}
+
+export async function getClientCredentials(clientId: string, clientSecret: string): Promise<ClientCredentialGrantResponse> {
+    const res = await oauthRequest(OAUTH_TOKEN_ENDPOINT, {
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: OAUTH_GRANT_TYPE
+    } satisfies ClientCredentialGrantQueryPairs);
+    return await res.json();
+}
+
+export async function revokeClientCredentials(clientId: string, token: string): Promise<void> {
+    await oauthRequest(OAUTH_REVOKE_ENDPOINT, {
+        client_id: clientId,
+        token
+    } satisfies ClientCredentialRevokeQueryPairs);
+}
+
+export async function authorize(
+    clientId: string,
+    clientSecret: string,
+    fn: (accessToken: string) => void | Promise<void>
+): Promise<void> {
+    let error: any;
+    const { access_token } = await getClientCredentials(clientId, clientSecret);
+    try {
+        await fn(access_token);
+    }
+    catch (err) {
+        error = err;
+    }
+    finally {
+        await revokeClientCredentials(clientId, access_token);
+        if (error) {
+            throw error;
+        }
+    }
+}
+
+async function authorizedRequest(
+    clientId: string,
+    accessToken: string,
+    url: string,
+    method: string,
+    options: AuthorizedSubscriptionRequestOptions
+): Promise<Response> {
+    const target = new URL(url);
+    const headers: HeadersInit = {
+        "Client-Id": clientId,
+        Authorization: `Bearer ${accessToken}`
+    };
+    let body: BodyInit | null = null;
+    if (options.body) {
+        headers["Content-Type"] = "application/json";
+        body = JSON.stringify(options.body);
+    }
+    if (options.query) {
+        target.search = options.query.toString();
+    }
+    return await fetch(target, {
+        method,
+        headers,
+        body
+    });
+}
+
+export async function getUsers(
+    clientId: string,
+    accessToken: string,
+    options: GetUsersOptions
+): Promise<GetUsersResponse> {
+    const query = new URLSearchParams();
+    options.ids?.forEach(id => query.append("id", id));
+    options.logins?.forEach(login => query.append("login", login));
+    const res = await authorizedRequest(
+        clientId,
+        accessToken,
+        GET_USERS_ENDPOINT,
+        "GET",
+        { query }
+    );
+    if (res.status === 200) {
+        return await res.json();
+    }
+    else {
+        throw new FetchError(res);
+    }
+}
+
+export async function subscribe(
+    clientId: string,
+    accessToken: string,
+    broadcasterId: string,
+    callbackEndpoint: string,
+    secret: string
+): Promise<void> {
+    const res = await authorizedRequest(
+        clientId,
+        accessToken,
+        SUBSCRIPTION_ENDPOINT,
+        "POST",
+        {
+            body: {
+                type: SubscriptionType.StreamOnline,
+                version: API_VERSION,
+                condition: { broadcaster_user_id: broadcasterId },
+                transport: {
+                    method: TransportMethod.Webhook,
+                    callback: callbackEndpoint,
+                    secret: secret
+                }
+            } satisfies CreateStreamOnlineSubscriptionBody
+        }
+    );
+    if (res.status !== 202) {
+        throw new FetchError(res);
+    }
+}
+
+export async function getSubscriptions(
+    clientId: string,
+    accessToken: string,
+    options: GetSubscriptionsOptions = {}
+): Promise<GetEventSubsResponse> {
+    const res = await authorizedRequest(
+        clientId,
+        accessToken,
+        SUBSCRIPTION_ENDPOINT,
+        "GET",
+        { query: new URLSearchParams(options) }
+    );
+    if (res.status === 200) {
+        return await res.json();
+    }
+    else {
+        throw new FetchError(res);
+    }
+}
+
+export async function deleteSubscription(
+    clientId: string,
+    accessToken: string,
+    subscriptionId: string
+): Promise<void> {
+    const res = await authorizedRequest(
+        clientId,
+        accessToken,
+        SUBSCRIPTION_ENDPOINT,
+        "DELETE",
+        { query: new URLSearchParams({ id: subscriptionId }) }
+    );
+    if (res.status !== 204) {
+        throw new FetchError(res);
+    }
+}
+
 export type BroadcasterTargettedCondition = { broadcaster_user_id: string };
 export type ChannelFollowCondition = BroadcasterTargettedCondition & { moderator_user_id: string };
 export type ChannelRaidCondition = {
-    from_broadcaster_user_id: string;
-    to_broadcaster_user_id: string;
+    from_broadcaster_user_id?: string;
+    to_broadcaster_user_id?: string;
 };
-export type ChannelPointsCustomSpecificRewardCondition = BroadcasterTargettedCondition & { reward_id: string };
+export type ChannelPointsCustomSpecificRewardCondition = BroadcasterTargettedCondition & { reward_id?: string };
 export type DropEntitlementGrantCondition = {
     organization_id: string;
-    category_id: string;
-    campaign_id: string;
+    category_id?: string;
+    campaign_id?: string;
 };
 export type ExtensionBitsTransactionCreateCondition = { extension_client_id: string };
 export type UserAuthorizationCondition = { client_id: string };
@@ -425,3 +626,105 @@ export type WebhookBody =
     StreamOnlineNotificationBody |
     StreamOnlineCallbackVerificationBody |
     StreamOnlineRevocationBody;
+
+interface BaseSubscriptionTransport {
+    method: `${TransportMethod}`;
+    callback?: string;
+    secret?: string;
+    session_id?: string;
+}
+interface CreateWebhookSubscriptionTransportOptions extends BaseSubscriptionTransport {
+    method: `${TransportMethod.Webhook}`;
+    callback: string;
+    secret: string;
+    session_id?: never;
+}
+interface CreatedSubscriptionTransport extends BaseSubscriptionTransport {
+    secret?: never;
+    connected_at?: string;
+}
+interface ListedSubscriptionTransport extends CreatedSubscriptionTransport {
+    disconnected_at?: string;
+}
+interface BaseEventSubscription {
+    id: string;
+    status: `${SubscriptionStatus}`;
+    type: `${SubscriptionType}`;
+    version: typeof API_VERSION;
+    condition: Condition;
+    created_at: string;
+    transport: CreatedSubscriptionTransport;
+    cost: number;
+}
+export interface ListedEventSubscription extends BaseEventSubscription {
+    transport: ListedSubscriptionTransport;
+}
+interface BaseEventSubResponse {
+    data: Array<BaseEventSubscription>;
+    total: number;
+    total_cost: number;
+    max_total_cost: number;
+}
+type Cursor = string;
+type GetEventSubPagination = { cursor?: Cursor };
+export type CreateEventSubResponse = BaseEventSubResponse;
+export interface GetEventSubsResponse extends BaseEventSubResponse {
+    data: Array<ListedEventSubscription>;
+    pagination: GetEventSubPagination;
+}
+
+type AuthorizedSubscriptionRequestOptions = {
+    body?: any,
+    query?: string | URLSearchParams
+};
+
+type CreateStreamOnlineSubscriptionBody = {
+    type: `${SubscriptionType.StreamOnline}`;
+    version: typeof API_VERSION;
+    condition: StreamOnlineSubscription["condition"];
+    transport: CreateWebhookSubscriptionTransportOptions;
+};
+
+export type GetSubscriptionsOptions = {
+    status?: `${SubscriptionStatus}`;
+    type?: `${SubscriptionType}`;
+    user_id?: string;
+    after?: Cursor;
+};
+
+type ClientCredentialGrantQueryPairs = {
+    client_id: string;
+    client_secret: string;
+    grant_type: typeof OAUTH_GRANT_TYPE;
+};
+
+type ClientCredentialGrantResponse = {
+    access_token: string;
+    expires_in: number;
+    token_type: string;
+};
+
+type ClientCredentialRevokeQueryPairs = {
+    client_id: string;
+    token: string;
+};
+
+type GetUsersOptions = {
+    ids?: Array<string>;
+    logins?: Array<string>;
+};
+
+type User = {
+    id: string;
+    login: string;
+    display_name: string;
+    type: `${UserType}`;
+    broadcaster_type: `${BroadcasterType}`;
+    description: string;
+    profile_image_url: string;
+    offline_image_url: string;
+    email?: string;
+    created_at: string;
+};
+
+type GetUsersResponse = { data: Array<User> };

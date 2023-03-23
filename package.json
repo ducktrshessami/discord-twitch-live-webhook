@@ -1,8 +1,11 @@
 {
   "name": "discord-twitch-live-webhook-worker",
   "version": "0.0.0",
+  "type": "module",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20230307.0",
+    "@types/inquirer": "^9.0.3",
+    "inquirer": "^9.1.5",
     "typescript": "^5.0.2",
     "wrangler": "2.12.3"
   },
@@ -10,6 +13,10 @@
   "scripts": {
     "start": "wrangler dev",
     "deploy": "wrangler publish",
-    "build": "tsc"
+    "build": "tsc --noEmit false",
+    "presubscribe": "yarn build",
+    "subscribe": "node dist/subscribe.js",
+    "preunsubscribe": "yarn build",
+    "unsubscribe": "node dist/unsubscribe.js"
   }
 }
