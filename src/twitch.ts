@@ -17,6 +17,7 @@ export const API_BASE_ENDPOINT = "https://api.twitch.tv/helix";
 const GET_USERS_ENDPOINT = API_BASE_ENDPOINT + "/users";
 const SUBSCRIPTION_ENDPOINT = API_BASE_ENDPOINT + "/eventsub/subscriptions";
 const GET_CHANNELS_ENDPOINT = API_BASE_ENDPOINT + "/channels";
+const GET_STREAMS_ENDPOINT = API_BASE_ENDPOINT + "/streams";
 
 export enum RequestHeaders {
     MessageId = "twitch-eventsub-message-id",
@@ -105,7 +106,8 @@ export enum StreamType {
     Playlist = "playlist",
     WatchParty = "watch_party",
     Premiere = "premiere",
-    Rerun = "rerun"
+    Rerun = "rerun",
+    Error = ""
 }
 
 export enum TransportMethod {
@@ -124,6 +126,11 @@ export enum BroadcasterType {
     Affiliate = "affiliate",
     Partner = "partner",
     Normal = ""
+}
+
+export enum StreamFilterType {
+    All = "all",
+    Live = "live"
 }
 
 async function getKey(secret: string): Promise<CryptoKey> {
@@ -350,6 +357,35 @@ export async function getChannels(
         clientId,
         accessToken,
         GET_CHANNELS_ENDPOINT,
+        "GET",
+        { query }
+    );
+    if (res.status === 200) {
+        return await res.json();
+    }
+    else {
+        throw new FetchError(res);
+    }
+}
+
+export async function getStreams(
+    clientId: string,
+    accessToken: string,
+    {
+        userIds,
+        userLogins,
+        gameIds,
+        ...nonIterOptions
+    }: GetStreamsOptions
+): Promise<GetStreamsResponse> {
+    const query = new URLSearchParams(<Record<string, string>>nonIterOptions);
+    userIds?.forEach(id => query.append("user_id", id));
+    userLogins?.forEach(login => query.append("user_login", login));
+    gameIds?.forEach(id => query.append("game_id", id));
+    const res = await authorizedRequest(
+        clientId,
+        accessToken,
+        GET_STREAMS_ENDPOINT,
         "GET",
         { query }
     );
@@ -629,9 +665,15 @@ export type StreamOnlineEvent = {
     broadcaster_user_id: string;
     broadcaster_user_login: string;
     broadcaster_user_name: string;
-    type: `${StreamType}`;
+    type: `${Exclude<StreamType, StreamType.Error>}`;
     started_at: string;
 };
+
+type Cursor = string;
+type ResponsePagination = { cursor?: Cursor };
+interface PaginatedResponse {
+    pagination: ResponsePagination;
+}
 
 export interface BaseWebhookBody {
     subscription: Subscription;
@@ -693,12 +735,9 @@ interface BaseEventSubResponse {
     total_cost: number;
     max_total_cost: number;
 }
-type Cursor = string;
-type GetEventSubPagination = { cursor?: Cursor };
 export type CreateEventSubResponse = BaseEventSubResponse;
-export interface GetEventSubsResponse extends BaseEventSubResponse {
+export interface GetEventSubsResponse extends BaseEventSubResponse, PaginatedResponse {
     data: Array<ListedEventSubscription>;
-    pagination: GetEventSubPagination;
 }
 
 type AuthorizedSubscriptionRequestOptions = {
@@ -767,3 +806,37 @@ type Channel = {
     delay: number;
     tags: Array<string>;
 };
+
+type GetStreamsOptions = {
+    userIds?: Array<string>;
+    userLogins?: Array<string>;
+    gameIds?: Array<string>;
+    type?: `${StreamFilterType}`;
+    language?: string;
+    first?: number;
+    before?: string;
+    after?: string;
+};
+type Stream = {
+    id: string;
+    user_id: string;
+    user_login: string;
+    user_name: string;
+    game_id: string;
+    game_name: string;
+    type: `${Exclude<
+        StreamType,
+        StreamType.Playlist |
+        StreamType.Premiere |
+        StreamType.Rerun |
+        StreamType.WatchParty
+    >}`;
+    title: string;
+    tags: Array<string>;
+    viewer_count: number;
+    started_at: string;
+    language: string;
+    thumbnail_url: string;
+    is_mature: boolean;
+};
+type GetStreamsResponse = GetResourceResponse<Stream> & PaginatedResponse;
