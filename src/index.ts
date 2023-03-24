@@ -126,7 +126,15 @@ async function forwardNotification(env: Env, body: StreamOnlineNotificationBody)
 
 async function forwardRevocation(env: Env, body: StreamOnlineRevocationBody): Promise<void> {
     try {
-        const info = await fetchEventSubStreamInfo(env, body);
+        const { data: [channel] } = await authorize(
+            env.TWITCH_CLIENT_ID,
+            env.TWITCH_SECRET,
+            token => getChannels(
+                env.TWITCH_CLIENT_ID,
+                token,
+                [body.subscription.condition.broadcaster_user_id]
+            )
+        );
     }
     catch (err) {
         console.error(err);
