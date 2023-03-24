@@ -10,3 +10,5 @@ export class FetchError extends CustomError {
         super(`${response.status}: ${response.statusText}`);
     }
 }
+
+export class WebhookError extends CustomError { }

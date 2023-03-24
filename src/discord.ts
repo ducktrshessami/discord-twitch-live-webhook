@@ -1,3 +1,11 @@
+import { FetchError, WebhookError } from "./error";
+
+export const API_VERSION = "10";
+
+export const API_BASE_ENDPOINT = `https://discord.com/api/v${API_VERSION}`;
+
+const WebhookUrlPattern = /https?:\/\/(?:ptb\.|canary\.)?discord\.com\/api(?:\/v\d{1,2})?\/webhooks\/(?<id>\d{17,19})\/(?<token>[\w-]{68})/i;
+
 export enum MessageFlags {
     Crossposted = 1,
     IsCrosspost = 2,
@@ -24,6 +32,40 @@ export enum AllowedMentionTypes {
     Roles = "roles",
     Users = "users",
     Everyone = "everyone"
+}
+
+function resolveWebhookOptions({
+    url,
+    ...data
+}: WebhookOptions): WebhookData | null {
+    if (data.id && data.token) {
+        return <WebhookData>data;
+    }
+    const match = WebhookUrlPattern.exec(url ?? "");
+    return match ? {
+        id: match.groups!.id,
+        token: match.groups!.token
+    } : null;
+}
+
+function webhookUrl(webhook: WebhookData): string {
+    return API_BASE_ENDPOINT + `/webhooks/${webhook.id}/${webhook.token}`;
+}
+
+export async function executeWebhook(webhookOptions: WebhookOptions, message: WebhookMessageWithoutAttachmentsBody): Promise<void> {
+    const webhook = resolveWebhookOptions(webhookOptions);
+    if (!webhook) {
+        throw new WebhookError("Failed to resolve webhook ID and token");
+    }
+    const url = webhookUrl(webhook);
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message)
+    });
+    if (res.status !== 204) {
+        throw new FetchError(res);
+    }
 }
 
 export type EmbedFooter = {
@@ -81,4 +123,15 @@ export type WebhookMessageWithoutAttachmentsBody = {
     allowed_mentions?: AllowedMentions;
     flags?: 0 | MessageFlags.SuppressEmbeds;
     thread_name?: string;
+};
+
+export type WebhookOptions = {
+    id?: string;
+    token?: string;
+    url?: string;
+};
+
+type WebhookData = {
+    id: string;
+    token: string;
 };
