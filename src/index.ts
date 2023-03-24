@@ -1,9 +1,11 @@
 import {
     authorize,
     getChannels,
+    getStreams,
     isStreamOnlineBody,
     NotificationType,
     RequestHeaders,
+    StreamFilterType,
     StreamOnlineCallbackVerificationBody,
     StreamOnlineNotificationBody,
     StreamOnlineRevocationBody,
@@ -74,22 +76,53 @@ function handleRevocation(env: Env, ctx: ExecutionContext, body: StreamOnlineRev
     return new Response(null, { status: 204 });
 }
 
-async function fetchEventSubChannel(env: Env, body: StreamOnlineWebhookBody) {
-    const { data: [channel] } = await authorize(
+async function fetchEventSubStreamInfo(env: Env, body: StreamOnlineWebhookBody): Promise<StreamInfo> {
+    return await authorize(
         env.TWITCH_CLIENT_ID,
         env.TWITCH_SECRET,
-        token => getChannels(
-            env.TWITCH_CLIENT_ID,
-            token,
-            [body.subscription.condition.broadcaster_user_id]
-        )
+        async (token): Promise<StreamInfo> => {
+            const { data: [stream] } = await getStreams(
+                env.TWITCH_CLIENT_ID,
+                token,
+                {
+                    type: StreamFilterType.Live,
+                    userIds: [body.subscription.condition.broadcaster_user_id]
+                }
+            );
+            if (stream) {
+                return {
+                    userId: stream.user_id,
+                    userLogin: stream.user_login,
+                    userName: stream.user_name,
+                    gameId: stream.game_id,
+                    gameName: stream.game_name,
+                    title: stream.title,
+                    startedAt: new Date(stream.started_at),
+                    language: stream.language,
+                    thumbnailUrl: stream.thumbnail_url
+                };
+            }
+            const { data: [channel] } = await getChannels(
+                env.TWITCH_CLIENT_ID,
+                token,
+                [body.subscription.condition.broadcaster_user_id]
+            );
+            return {
+                userId: channel.broadcaster_id,
+                userLogin: channel.broadcaster_login,
+                userName: channel.broadcaster_name,
+                gameId: channel.game_id,
+                gameName: channel.game_name,
+                title: channel.title,
+                language: channel.broadcaster_language
+            };
+        }
     );
-    return channel;
 }
 
 async function forwardNotification(env: Env, body: StreamOnlineNotificationBody): Promise<void> {
     try {
-        const channel = await fetchEventSubChannel(env, body);
+        const info = await fetchEventSubStreamInfo(env, body);
     }
     catch (err) {
         console.error(err);
@@ -98,9 +131,21 @@ async function forwardNotification(env: Env, body: StreamOnlineNotificationBody)
 
 async function forwardRevocation(env: Env, body: StreamOnlineRevocationBody): Promise<void> {
     try {
-        const channel = await fetchEventSubChannel(env, body);
+        const info = await fetchEventSubStreamInfo(env, body);
     }
     catch (err) {
         console.error(err);
     }
 }
+
+type StreamInfo = {
+    userId: string;
+    userLogin: string;
+    userName: string;
+    gameId: string;
+    gameName: string;
+    title: string;
+    startedAt?: Date;
+    language: string;
+    thumbnailUrl?: string;
+};
