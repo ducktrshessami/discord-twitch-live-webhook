@@ -198,15 +198,16 @@ export async function revokeClientCredentials(clientId: string, token: string): 
     } satisfies ClientCredentialRevokeQueryPairs);
 }
 
-export async function authorize(
+export async function authorize<T>(
     clientId: string,
     clientSecret: string,
-    fn: (accessToken: string) => void | Promise<void>
-): Promise<void> {
+    fn: (accessToken: string) => Awaitable<T>
+): Promise<T> {
+    let result: T;
     let error: any;
     const { access_token } = await getClientCredentials(clientId, clientSecret);
     try {
-        await fn(access_token);
+        result = await fn(access_token);
     }
     catch (err) {
         error = err;
@@ -215,6 +216,9 @@ export async function authorize(
         await revokeClientCredentials(clientId, access_token);
         if (error) {
             throw error;
+        }
+        else {
+            return result!;
         }
     }
 }
@@ -357,6 +361,8 @@ export async function getChannels(
         throw new FetchError(res);
     }
 }
+
+type Awaitable<T> = T | Promise<T>;
 
 export type BroadcasterTargettedCondition = { broadcaster_user_id: string };
 export type ChannelFollowCondition = BroadcasterTargettedCondition & { moderator_user_id: string };
