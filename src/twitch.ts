@@ -133,6 +133,10 @@ export enum StreamFilterType {
     Live = "live"
 }
 
+export function channelUrl(name: string): string {
+    return `https://www.twitch.tv/${name}`;
+}
+
 async function getKey(secret: string): Promise<CryptoKey> {
     return await crypto.subtle.importKey(
         "raw",
