@@ -63,6 +63,32 @@ function checkAge(request: Request, env: Env): void {
     }
 }
 
+async function forwardNotification(env: Env, body: StreamOnlineNotificationBody): Promise<void> {
+    try {
+        const info = await fetchEventSubStreamInfo(env, body);
+    }
+    catch (err) {
+        console.error(err);
+    }
+}
+
+async function forwardRevocation(env: Env, body: StreamOnlineRevocationBody): Promise<void> {
+    try {
+        const { data: [channel] } = await authorize(
+            env.TWITCH_CLIENT_ID,
+            env.TWITCH_SECRET,
+            token => getChannels(
+                env.TWITCH_CLIENT_ID,
+                token,
+                [body.subscription.condition.broadcaster_user_id]
+            )
+        );
+    }
+    catch (err) {
+        console.error(err);
+    }
+}
+
 function handleNotification(env: Env, ctx: ExecutionContext, body: StreamOnlineNotificationBody): Response {
     ctx.waitUntil(forwardNotification(env, body));
     return new Response(null, { status: 204 });
@@ -121,32 +147,6 @@ async function fetchEventSubStreamInfo(env: Env, body: StreamOnlineWebhookBody):
             };
         }
     );
-}
-
-async function forwardNotification(env: Env, body: StreamOnlineNotificationBody): Promise<void> {
-    try {
-        const info = await fetchEventSubStreamInfo(env, body);
-    }
-    catch (err) {
-        console.error(err);
-    }
-}
-
-async function forwardRevocation(env: Env, body: StreamOnlineRevocationBody): Promise<void> {
-    try {
-        const { data: [channel] } = await authorize(
-            env.TWITCH_CLIENT_ID,
-            env.TWITCH_SECRET,
-            token => getChannels(
-                env.TWITCH_CLIENT_ID,
-                token,
-                [body.subscription.condition.broadcaster_user_id]
-            )
-        );
-    }
-    catch (err) {
-        console.error(err);
-    }
 }
 
 type StreamInfo = {
