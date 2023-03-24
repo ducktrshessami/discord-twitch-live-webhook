@@ -105,6 +105,12 @@ export type Embed = {
     timestamp?: string;
     color?: number;
     footer?: EmbedFooter;
+    image?: EmbedImage;
+    thumbnail?: EmbedThumbnail;
+    video?: EmbedVideo;
+    provider?: EmbedProvider;
+    author?: EmbedAuthor;
+    fields?: Array<EmbedField>;
 };
 
 export type AllowedMentions = {
