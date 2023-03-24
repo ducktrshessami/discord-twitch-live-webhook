@@ -1,5 +1,11 @@
 import {
+    executeWebhook,
+    relativeTimestamp,
+    WebhookOptions
+} from "./discord";
+import {
     authorize,
+    channelUrl,
     getChannels,
     getStreams,
     getUsers,
@@ -20,6 +26,10 @@ export interface Env {
     TWITCH_CLIENT_ID: string;
     TWITCH_SECRET: string;
     TWITCH_AGE_WARNING?: string;
+    DISCORD_WEBHOOK_ID?: string;
+    DISCORD_WEBHOOK_TOKEN?: string;
+    DISCORD_WEBHOOK_URL?: string;
+    DISCORD_AVATAR_URL?: string;
 }
 
 export default {
@@ -66,6 +76,18 @@ function checkAge(request: Request, env: Env): void {
 async function forwardNotification(env: Env, body: StreamOnlineNotificationBody): Promise<void> {
     try {
         const info = await fetchEventSubStreamInfo(env, body);
+        await executeWebhook(resolveWebhookEnvs(env), {
+            username: "Twitch Live Worker",
+            avatar_url: env.DISCORD_AVATAR_URL,
+            content: "@everyone",
+            embeds: [{
+                title: info.title,
+                url: channelUrl(info.userLogin),
+                thumbnail: { url: info.userAvatarUrl },
+                description: `${info.userName} ${info.startedAt ? "went live" : "goes live"} ${relativeTimestamp(info.startedAt?.getTime() ?? Date.now() + info.delay)}\nPlaying ${info.gameName}`,
+                image: info.thumbnailUrl ? { url: info.thumbnailUrl } : undefined
+            }]
+        });
     }
     catch (err) {
         console.error(err);
@@ -147,6 +169,14 @@ async function fetchEventSubStreamInfo(env: Env, body: StreamOnlineWebhookBody):
             };
         }
     );
+}
+
+function resolveWebhookEnvs(env: Env): WebhookOptions {
+    return {
+        id: env.DISCORD_WEBHOOK_ID,
+        token: env.DISCORD_WEBHOOK_TOKEN,
+        url: env.DISCORD_WEBHOOK_URL
+    };
 }
 
 type StreamInfo = {
