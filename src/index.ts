@@ -2,6 +2,7 @@ import {
     authorize,
     getChannels,
     getStreams,
+    getUsers,
     isStreamOnlineBody,
     NotificationType,
     RequestHeaders,
@@ -83,7 +84,8 @@ async function fetchEventSubStreamInfo(env: Env, body: StreamOnlineWebhookBody):
         async (token): Promise<StreamInfo> => {
             const [
                 { data: [stream] },
-                { data: [channel] }
+                { data: [channel] },
+                { data: [user] }
             ] = await Promise.all([
                 getStreams(
                     env.TWITCH_CLIENT_ID,
@@ -97,12 +99,18 @@ async function fetchEventSubStreamInfo(env: Env, body: StreamOnlineWebhookBody):
                     env.TWITCH_CLIENT_ID,
                     token,
                     [body.subscription.condition.broadcaster_user_id]
+                ),
+                getUsers(
+                    env.TWITCH_CLIENT_ID,
+                    token,
+                    { ids: [body.subscription.condition.broadcaster_user_id] }
                 )
             ]);
             return {
                 userId: stream?.user_id ?? channel.broadcaster_id,
                 userLogin: stream?.user_login ?? channel.broadcaster_login,
                 userName: stream?.user_name ?? channel.broadcaster_name,
+                userAvatarUrl: user.profile_image_url,
                 gameId: stream?.game_id ?? channel.game_id,
                 gameName: stream?.game_name ?? channel.game_name,
                 title: stream?.title ?? channel.title,
@@ -145,6 +153,7 @@ type StreamInfo = {
     userId: string;
     userLogin: string;
     userName: string;
+    userAvatarUrl: string;
     gameId: string;
     gameName: string;
     title: string;
