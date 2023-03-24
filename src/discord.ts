@@ -68,6 +68,10 @@ export async function executeWebhook(webhookOptions: WebhookOptions, message: We
     }
 }
 
+export function relativeTimestamp(timeinMs: number): string {
+    return `<t:${Math.round(timeinMs / 1000)}:R>`;
+}
+
 export type EmbedFooter = {
     text: string;
     icon_url?: string;
