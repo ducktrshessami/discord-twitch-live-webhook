@@ -1,16 +1,20 @@
 import {
+    authorize,
+    getChannels,
+    isStreamOnlineBody,
     NotificationType,
     RequestHeaders,
-    verifyRequest,
-    WebhookBody,
     StreamOnlineCallbackVerificationBody,
     StreamOnlineNotificationBody,
     StreamOnlineRevocationBody,
-    isStreamOnlineBody
+    StreamOnlineWebhookBody,
+    verifyRequest,
+    WebhookBody
 } from "./twitch";
 import { requestHeader } from "./utils";
 
 export interface Env {
+    TWITCH_CLIENT_ID: string;
     TWITCH_SECRET: string;
     TWITCH_AGE_WARNING?: string;
 }
@@ -32,9 +36,9 @@ export default {
                 return new Response(null, { status: 403 });
             }
             switch (request.headers.get(RequestHeaders.MessageType)) {
-                case NotificationType.Notification: return await handleNotification(<StreamOnlineNotificationBody>json);
+                case NotificationType.Notification: return handleNotification(env, ctx, <StreamOnlineNotificationBody>json);
                 case NotificationType.WebhookCallbackVerification: return handleChallenge(<StreamOnlineCallbackVerificationBody>json);
-                case NotificationType.Revocation: return await handleRevocation(json);
+                case NotificationType.Revocation: return handleRevocation(env, ctx, json);
             }
         }
         catch (err) {
@@ -56,8 +60,8 @@ function checkAge(request: Request, env: Env): void {
     }
 }
 
-async function handleNotification(body: StreamOnlineNotificationBody): Promise<Response> {
-    // TODO: Forward notification
+function handleNotification(env: Env, ctx: ExecutionContext, body: StreamOnlineNotificationBody): Response {
+    ctx.waitUntil(forwardNotification(env, body));
     return new Response(null, { status: 204 });
 }
 
@@ -65,7 +69,38 @@ function handleChallenge(body: StreamOnlineCallbackVerificationBody): Response {
     return new Response(body.challenge, { status: 200 });
 }
 
-async function handleRevocation(body: StreamOnlineRevocationBody): Promise<Response> {
-    // TODO: Forward revocation
+function handleRevocation(env: Env, ctx: ExecutionContext, body: StreamOnlineRevocationBody): Response {
+    ctx.waitUntil(forwardRevocation(env, body));
     return new Response(null, { status: 204 });
+}
+
+async function fetchEventSubChannel(env: Env, body: StreamOnlineWebhookBody) {
+    const { data: [channel] } = await authorize(
+        env.TWITCH_CLIENT_ID,
+        env.TWITCH_SECRET,
+        token => getChannels(
+            env.TWITCH_CLIENT_ID,
+            token,
+            [body.subscription.condition.broadcaster_user_id]
+        )
+    );
+    return channel;
+}
+
+async function forwardNotification(env: Env, body: StreamOnlineNotificationBody): Promise<void> {
+    try {
+        const channel = await fetchEventSubChannel(env, body);
+    }
+    catch (err) {
+        console.error(err);
+    }
+}
+
+async function forwardRevocation(env: Env, body: StreamOnlineRevocationBody): Promise<void> {
+    try {
+        const channel = await fetchEventSubChannel(env, body);
+    }
+    catch (err) {
+        console.error(err);
+    }
 }
