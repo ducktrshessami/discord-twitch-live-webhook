@@ -23,7 +23,7 @@ export default {
     ): Promise<Response> {
         try {
             const body = await request.blob();
-            if (!(await verifyRequest(request, body, env))) {
+            if (!(await verifyRequest(env.TWITCH_SECRET, request, body))) {
                 return new Response(null, { status: 401 });
             }
             checkAge(request, env);

@@ -1,4 +1,3 @@
-import { Env } from "./index.js";
 import { FetchError } from "./error.js";
 import {
     hexBuffer,
@@ -127,10 +126,10 @@ export enum BroadcasterType {
     Normal = ""
 }
 
-async function getKey(env: Env): Promise<CryptoKey> {
+async function getKey(secret: string): Promise<CryptoKey> {
     return await crypto.subtle.importKey(
         "raw",
-        stringBuffer(env.TWITCH_SECRET),
+        stringBuffer(secret),
         {
             name: "HMAC",
             hash: "SHA-256"
@@ -149,10 +148,10 @@ async function getHmacMessage(request: Request, body: Blob): Promise<ArrayBuffer
         .arrayBuffer();
 }
 
-export async function verifyRequest(request: Request, body: Blob, env: Env): Promise<boolean> {
+export async function verifyRequest(secret: string, request: Request, body: Blob): Promise<boolean> {
     const signature = requestHeader(request, RequestHeaders.MessageSignature);
     const [key, message] = await Promise.all([
-        getKey(env),
+        getKey(secret),
         getHmacMessage(request, body)
     ]);
     return await crypto.subtle.verify(
