@@ -81,40 +81,35 @@ async function fetchEventSubStreamInfo(env: Env, body: StreamOnlineWebhookBody):
         env.TWITCH_CLIENT_ID,
         env.TWITCH_SECRET,
         async (token): Promise<StreamInfo> => {
-            const { data: [stream] } = await getStreams(
-                env.TWITCH_CLIENT_ID,
-                token,
-                {
-                    type: StreamFilterType.Live,
-                    userIds: [body.subscription.condition.broadcaster_user_id]
-                }
-            );
-            if (stream) {
-                return {
-                    userId: stream.user_id,
-                    userLogin: stream.user_login,
-                    userName: stream.user_name,
-                    gameId: stream.game_id,
-                    gameName: stream.game_name,
-                    title: stream.title,
-                    startedAt: new Date(stream.started_at),
-                    language: stream.language,
-                    thumbnailUrl: stream.thumbnail_url
-                };
-            }
-            const { data: [channel] } = await getChannels(
-                env.TWITCH_CLIENT_ID,
-                token,
-                [body.subscription.condition.broadcaster_user_id]
-            );
+            const [
+                { data: [stream] },
+                { data: [channel] }
+            ] = await Promise.all([
+                getStreams(
+                    env.TWITCH_CLIENT_ID,
+                    token,
+                    {
+                        type: StreamFilterType.Live,
+                        userIds: [body.subscription.condition.broadcaster_user_id]
+                    }
+                ),
+                getChannels(
+                    env.TWITCH_CLIENT_ID,
+                    token,
+                    [body.subscription.condition.broadcaster_user_id]
+                )
+            ]);
             return {
-                userId: channel.broadcaster_id,
-                userLogin: channel.broadcaster_login,
-                userName: channel.broadcaster_name,
-                gameId: channel.game_id,
-                gameName: channel.game_name,
-                title: channel.title,
-                language: channel.broadcaster_language
+                userId: stream?.user_id ?? channel.broadcaster_id,
+                userLogin: stream?.user_login ?? channel.broadcaster_login,
+                userName: stream?.user_name ?? channel.broadcaster_name,
+                gameId: stream?.game_id ?? channel.game_id,
+                gameName: stream?.game_name ?? channel.game_name,
+                title: stream?.title ?? channel.title,
+                delay: channel.delay,
+                startedAt: stream?.started_at ? new Date(stream.started_at) : undefined,
+                language: stream?.language ?? channel.broadcaster_language,
+                thumbnailUrl: stream?.thumbnail_url
             };
         }
     );
@@ -145,6 +140,7 @@ type StreamInfo = {
     gameId: string;
     gameName: string;
     title: string;
+    delay: number;
     startedAt?: Date;
     language: string;
     thumbnailUrl?: string;
