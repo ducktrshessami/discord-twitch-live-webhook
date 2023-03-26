@@ -95,7 +95,7 @@ async function forwardNotification(
                 title: info.title,
                 url: channelUrl(info.userLogin),
                 thumbnail: { url: info.userAvatarUrl },
-                description: `${info.userName} ${info.startedAt ? "went live" : "goes live"} ${relativeTimestamp(info.startedAt?.getTime() ?? timestamp + info.delay)}\nPlaying ${info.gameName}`,
+                description: `**${info.userName}** ${info.startedAt ? "went live" : "goes live"} ${relativeTimestamp(info.startedAt?.getTime() ?? timestamp + info.delay)}\nPlaying **${info.gameName}**`,
                 image: info.thumbnailUrl ? { url: info.thumbnailUrl } : undefined
             }]
         });
