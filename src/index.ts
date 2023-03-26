@@ -117,6 +117,12 @@ async function forwardRevocation(env: Env, body: StreamOnlineRevocationBody): Pr
                 [body.subscription.condition.broadcaster_user_id]
             )
         );
+        const status = body.subscription.status.replace("_", " ");
+        await executeWebhook(resolveWebhookEnvs(env), {
+            username: env.DISCORD_USERNAME,
+            avatar_url: env.DISCORD_AVATAR_URL,
+            content: `Subscription to channel **${channel.broadcaster_name}** revoked: ${status}`
+        });
     }
     catch (err) {
         console.error(err);
