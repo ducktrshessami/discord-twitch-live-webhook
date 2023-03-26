@@ -24,7 +24,7 @@ import { requestHeader } from "./utils";
 
 export interface Env {
     TWITCH_CLIENT_ID: string;
-    TWITCH_SECRET: string;
+    TWITCH_CLIENT_SECRET: string;
     TWITCH_AGE_WARNING?: string;
     DISCORD_WEBHOOK_ID?: string;
     DISCORD_WEBHOOK_TOKEN?: string;
@@ -41,7 +41,7 @@ export default {
     ): Promise<Response> {
         try {
             const body = await request.blob();
-            if (!(await verifyRequest(env.TWITCH_SECRET, request, body))) {
+            if (!(await verifyRequest(env.TWITCH_CLIENT_SECRET, request, body))) {
                 return new Response(null, { status: 401 });
             }
             const timestamp = resolveTimestamp(request, env);
@@ -110,7 +110,7 @@ async function forwardRevocation(env: Env, body: StreamOnlineRevocationBody): Pr
     try {
         const { data: [channel] } = await authorize(
             env.TWITCH_CLIENT_ID,
-            env.TWITCH_SECRET,
+            env.TWITCH_CLIENT_SECRET,
             token => getChannels(
                 env.TWITCH_CLIENT_ID,
                 token,
@@ -170,7 +170,7 @@ function handleRevocation(env: Env, ctx: ExecutionContext, body: StreamOnlineRev
 async function fetchEventSubStreamInfo(env: Env, body: StreamOnlineWebhookBody): Promise<StreamInfo> {
     return await authorize(
         env.TWITCH_CLIENT_ID,
-        env.TWITCH_SECRET,
+        env.TWITCH_CLIENT_SECRET,
         async (token): Promise<StreamInfo> => {
             const [
                 { data: [stream] },
