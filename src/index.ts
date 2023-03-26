@@ -29,6 +29,7 @@ export interface Env {
     DISCORD_WEBHOOK_ID?: string;
     DISCORD_WEBHOOK_TOKEN?: string;
     DISCORD_WEBHOOK_URL?: string;
+    DISCORD_USERNAME?: string;
     DISCORD_AVATAR_URL?: string;
 }
 
@@ -88,7 +89,7 @@ async function forwardNotification(
     try {
         const info = await fetchEventSubStreamInfo(env, body);
         await executeWebhook(resolveWebhookEnvs(env), {
-            username: "Twitch Live Worker",
+            username: env.DISCORD_USERNAME,
             avatar_url: env.DISCORD_AVATAR_URL,
             content: "@everyone",
             embeds: [{
