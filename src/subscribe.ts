@@ -1,6 +1,10 @@
 import inquirer from "inquirer";
+import {
+    authorize,
+    getUsers,
+    subscribe
+} from "twitch-eventsub-utils";
 import { SubscribeQuestions } from "./cli.js";
-import { authorize, getUsers, subscribe } from "./twitch.js";
 
 const input = await inquirer.prompt(SubscribeQuestions);
 if (!input.confirm) {

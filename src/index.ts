@@ -1,15 +1,4 @@
 import {
-    executeWebhook,
-    relativeTimestamp,
-    WebhookOptions
-} from "./discord";
-import {
-    authorize,
-    channelUrl,
-    getChannels,
-    getStreams,
-    getUsers,
-    isStreamOnlineBody,
     NotificationType,
     RequestHeaders,
     StreamFilterType,
@@ -17,9 +6,20 @@ import {
     StreamOnlineNotificationBody,
     StreamOnlineRevocationBody,
     StreamOnlineWebhookBody,
-    verifyRequest,
-    WebhookBody
-} from "./twitch";
+    WebhookBody,
+    authorize,
+    channelUrl,
+    getChannels,
+    getStreams,
+    getUsers,
+    isStreamOnlineBody
+} from "twitch-eventsub-utils";
+import { verifyRequest } from "./twitch";
+import {
+    WebhookOptions,
+    executeWebhook,
+    relativeTimestamp
+} from "./discord";
 import { requestHeader } from "./utils";
 
 export interface Env {
@@ -56,7 +56,7 @@ export default {
                     <StreamOnlineNotificationBody>json,
                     timestamp
                 );
-                case NotificationType.WebhookCallbackVerification: return handleChallenge(<StreamOnlineCallbackVerificationBody>json);
+                case NotificationType.WebhookCallbackVerification: return handleChallenge(ctx, <StreamOnlineCallbackVerificationBody>json);
                 case NotificationType.Revocation: return handleRevocation(env, ctx, json);
             }
         }
@@ -158,7 +158,7 @@ function handleNotification(
     return new Response(null, { status: 204 });
 }
 
-function handleChallenge(body: StreamOnlineCallbackVerificationBody): Response {
+function handleChallenge(ctx: ExecutionContext, body: StreamOnlineCallbackVerificationBody): Response {
     return new Response(body.challenge, { status: 200 });
 }
 

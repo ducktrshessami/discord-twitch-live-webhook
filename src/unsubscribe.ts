@@ -1,13 +1,13 @@
 import inquirer from "inquirer";
-import { createUnsubscribeQuestions, PreUnsubscribeQuestions } from "./cli.js";
 import {
+    GetEventSubsResponse,
+    ListedEventSubscription,
+    StreamOnlineSubscription,
     authorize,
     deleteSubscription,
-    GetEventSubsResponse,
-    getSubscriptions,
-    ListedEventSubscription,
-    StreamOnlineSubscription
-} from "./twitch.js";
+    getSubscriptions
+} from "twitch-eventsub-utils";
+import { PreUnsubscribeQuestions, createUnsubscribeQuestions } from "./cli.js";
 
 const authInput = await inquirer.prompt(PreUnsubscribeQuestions);
 if (!authInput.confirm) {
