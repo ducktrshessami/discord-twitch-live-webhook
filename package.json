@@ -1,5 +1,5 @@
 {
-  "name": "discord-twitch-live-webhook-worker",
+  "name": "discord-twitch-live-webhook",
   "version": "1.0.0",
   "type": "module",
   "devDependencies": {
